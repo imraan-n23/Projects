@@ -1,0 +1,395 @@
+{
+  "name": "Start Invoice Processing",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const results = [];\n\nfor (const item of $input.all()) {\n  const d = item.json;\n\n  const errors = [];\n\n  if (!d.invoice_id) errors.push(\"Missing Invoice ID\");\n  if (!d.invoice_date) errors.push(\"Missing Invoice Date\");\n  if (!d.due_date) errors.push(\"Missing Due Date\");\n  if (!d.total_amount || Number(d.total_amount) <= 0) {\n    errors.push(\"Invalid Total Amount\");\n  }\n\n  if (\n    d.invoice_date &&\n    d.due_date &&\n    new Date(d.due_date) < new Date(d.invoice_date)\n  ) {\n    errors.push(\"Due Date Before Invoice Date\");\n  }\n\n  results.push({\n    json: {\n      ...d,\n      validation_status: errors.length === 0 ? \"Valid\" : \"Invalid\",\n      validation_errors: errors.join(\", \")\n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1072,
+        -928
+      ],
+      "id": "ab739ad1-5458-44b8-a037-7bd3f2c9b577",
+      "name": "Validate Invoice Data"
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -1296,
+        -928
+      ],
+      "id": "1ee987ef-8bdb-419a-b2d7-800fb691880b",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "1J5B6wf-krjBT5THauM_qieOYvuPvU3xf",
+          "mode": "list",
+          "cachedResultName": "invoice_automation_dataset.xlsx",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1J5B6wf-krjBT5THauM_qieOYvuPvU3xf/edit?usp=drivesdk&ouid=101476263080639909629&rtpof=true&sd=true"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -1520,
+        -832
+      ],
+      "id": "746abfdd-c36a-4784-854c-87f265a2ceab",
+      "name": "Download file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "Znzw6ZX1darZsFE0",
+          "name": "Google Drive account 3"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1744,
+        -832
+      ],
+      "id": "3ed45b7a-58f8-4bd0-a271-aa842c2ca75e",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nconst invoiceCounts = {};\n\nfor (const item of items) {\n  const invoiceId = item.json.invoice_id;\n\n  invoiceCounts[invoiceId] = (invoiceCounts[invoiceId] || 0) + 1;\n}\n\nreturn items.map(item => {\n  const invoiceId = item.json.invoice_id;\n  const count = invoiceCounts[invoiceId];\n\n  return {\n    json: {\n      ...item.json,\n      duplicate_status: count > 1 ? \"Duplicate\" : \"Unique\",\n      duplicate_count: count\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -848,
+        -928
+      ],
+      "id": "0bdc38d0-e68a-47d1-9219-3f3e46e13c19",
+      "name": "Duplicate Invoice Check"
+    },
+    {
+      "parameters": {
+        "jsCode": "const today = new Date();\n\nreturn $input.all().map(item => {\n  const d = item.json;\n\n  const dueDate = new Date(d.due_date);\n  const totalAmount = Number(d.total_amount || 0);\n  const paidAmount = Number(d.paid_amount || 0);\n  const balanceDue = Number(d.balance_due || 0);\n\n  let payment_status = d.payment_status || \"Unknown\";\n  let due_status = \"Not Due\";\n\n  if (balanceDue <= 0) {\n    due_status = \"Paid\";\n  } else if (dueDate < today) {\n    due_status = \"Overdue\";\n  } else {\n    due_status = \"Due\";\n  }\n\n  return {\n    json: {\n      ...d,\n      calculated_balance_due: totalAmount - paidAmount,\n      payment_status,\n      due_status\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        -928
+      ],
+      "id": "86d72b57-ee9f-43e7-b96a-b03ea1da14a5",
+      "name": "Payment & Due Date Check"
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "options": {
+          "sheetName": "Transactions"
+        }
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -1072,
+        -736
+      ],
+      "id": "01df626e-4f1f-4743-8ecd-909ab01c536a",
+      "name": "Extract from File1"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "fieldsToMatchString": "invoice_id",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -400,
+        -832
+      ],
+      "id": "c18cf641-72b3-4358-89c7-ba70565cdc1a",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n  const d = item.json;\n\n  const invoiceAmount = Number(d.total_amount || 0);\n  const transactionAmount = Number(d.amount || 0);\n\n  const difference = invoiceAmount - transactionAmount;\n\n  let reconciliation_status;\n\n  if (difference === 0) {\n    reconciliation_status = \"Fully Matched\";\n  } else if (transactionAmount === 0) {\n    reconciliation_status = \"No Payment\";\n  } else if (difference > 0) {\n    reconciliation_status = \"Underpaid\";\n  } else {\n    reconciliation_status = \"Overpaid\";\n  }\n\n  return {\n    json: {\n      ...d,\n      invoice_amount: invoiceAmount,\n      transaction_amount: transactionAmount,\n      amount_difference: difference,\n      reconciliation_status\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -848,
+        -736
+      ],
+      "id": "f8b47d37-a3ce-498b-99cc-74335f8f2413",
+      "name": "Transaction Analysis"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst grouped = {};\n\nfor (const item of items) {\n  const d = item.json;\n  const invoiceId = d.invoice_id;\n\n  if (!invoiceId) continue;\n\n  if (!grouped[invoiceId]) {\n    grouped[invoiceId] = {\n      invoice_id: invoiceId,\n      transaction_count: 0,\n      valid_payment_count: 0,\n      valid_payment_amount: 0\n    };\n  }\n\n  const amount = Math.abs(Number(d.amount || 0));\n  const type = String(d.type || \"\").trim().toLowerCase();\n  const status = String(d.transaction_status || \"\").trim().toLowerCase();\n  const description = String(d.description || \"\").trim().toLowerCase();\n\n  grouped[invoiceId].transaction_count += 1;\n\n  const validPayment =\n    type === \"credit\" &&\n    status === \"completed\" &&\n    (\n      description === \"invoice payment\" ||\n      description === \"partial payment\" ||\n      description === \"vendor settlement\"\n    );\n\n  if (validPayment) {\n    grouped[invoiceId].valid_payment_count += 1;\n    grouped[invoiceId].valid_payment_amount += amount;\n  }\n}\n\nreturn Object.values(grouped).map(d => ({\n  json: {\n    invoice_id: d.invoice_id,\n    transaction_count: d.transaction_count,\n    valid_payment_count: d.valid_payment_count,\n    valid_payment_amount: Number(\n      d.valid_payment_amount.toFixed(2)\n    )\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        -736
+      ],
+      "id": "8a3009b1-2cf6-44bb-bff5-9829fb38bb5b",
+      "name": "Aggregate Transaction Analysis"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n  const d = item.json;\n\n  const invoiceAmount = Number(d.total_amount || 0);\n  const paymentAmount = Number(d.valid_payment_amount || 0);\n\n  const difference = Number(\n    (invoiceAmount - paymentAmount).toFixed(2)\n  );\n\n  let reconciliationStatus;\n\n  if (paymentAmount === 0) {\n    reconciliationStatus = \"No Payment\";\n  } else if (Math.abs(difference) < 0.01) {\n    reconciliationStatus = \"Fully Matched\";\n  } else if (difference > 0) {\n    reconciliationStatus = \"Underpaid\";\n  } else {\n    reconciliationStatus = \"Overpaid\";\n  }\n\n  return {\n    json: {\n      ...d,\n      invoice_amount: invoiceAmount,\n      transaction_amount: paymentAmount,\n      amount_difference: difference,\n      reconciliation_status: reconciliationStatus\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -176,
+        -832
+      ],
+      "id": "4f76f48d-569e-44d2-a134-97d0cba501f4",
+      "name": "Reconciliation"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n  const d = item.json;\n\n  const exceptions = [];\n\n  if (d.validation_status === \"Invalid\") {\n    exceptions.push(\"Invalid Invoice\");\n  }\n\n  if (d.duplicate_status === \"Duplicate\") {\n    exceptions.push(\"Duplicate Invoice\");\n  }\n\n  if (d.due_status === \"Overdue\") {\n    exceptions.push(\"Overdue Payment\");\n  }\n\n  if (\n    d.reconciliation_status === \"Underpaid\" ||\n    d.reconciliation_status === \"Overpaid\" ||\n    d.reconciliation_status === \"No Payment\"\n  ) {\n    exceptions.push(d.reconciliation_status);\n  }\n\n  return {\n    json: {\n      ...d,\n      exception_status: exceptions.length > 0 ? \"Exception\" : \"No Exception\",\n      exception_type: exceptions.length > 0\n        ? exceptions.join(\", \")\n        : \"None\"\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        48,
+        -832
+      ],
+      "id": "5ffa7214-5105-46da-9886-cc250b0bfd4c",
+      "name": "Exception Detection"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nlet totalInvoices = items.length;\nlet totalInvoiceAmount = 0;\nlet totalPaidAmount = 0;\nlet totalBalanceDue = 0;\nlet overdueInvoices = 0;\nlet exceptionInvoices = 0;\nlet duplicateInvoices = 0;\nlet validInvoices = 0;\n\nfor (const item of items) {\n  const d = item.json;\n\n  totalInvoiceAmount += Number(d.total_amount || 0);\n  totalPaidAmount += Number(d.valid_payment_amount || 0);\n  totalBalanceDue += Number(d.balance_due || 0);\n\n  if (d.due_status === \"Overdue\") {\n    overdueInvoices++;\n  }\n\n  if (d.exception_status === \"Exception\") {\n    exceptionInvoices++;\n  }\n\n  if (d.duplicate_status === \"Duplicate\") {\n    duplicateInvoices++;\n  }\n\n  if (d.validation_status === \"Valid\") {\n    validInvoices++;\n  }\n}\n\nreturn [\n  {\n    json: {\n      total_invoices: totalInvoices,\n      total_invoice_amount: Number(totalInvoiceAmount.toFixed(2)),\n      total_paid_amount: Number(totalPaidAmount.toFixed(2)),\n      total_balance_due: Number(totalBalanceDue.toFixed(2)),\n      overdue_invoices: overdueInvoices,\n      exception_invoices: exceptionInvoices,\n      duplicate_invoices: duplicateInvoices,\n      valid_invoices: validInvoices\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        -928
+      ],
+      "id": "c6c46abc-ea4b-4f9a-ab2c-72159e6288b4",
+      "name": "Financial Analytics"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\n\nreturn [\n  {\n    json: {\n      report_name: \"Invoice Processing & Accounts Analytics Report\",\n      total_invoices: d.total_invoices,\n      total_invoice_amount: d.total_invoice_amount,\n      total_paid_amount: d.total_paid_amount,\n      total_balance_due: d.total_balance_due,\n      overdue_invoices: d.overdue_invoices,\n      exception_invoices: d.exception_invoices,\n      duplicate_invoices: d.duplicate_invoices,\n      valid_invoices: d.valid_invoices,\n      generated_at: new Date().toISOString()\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        496,
+        -928
+      ],
+      "id": "cdd2826a-4c82-4aa3-a1bb-fed79a2f2307",
+      "name": "Final Reporting"
+    },
+    {
+      "parameters": {
+        "binaryPropertyName": "json",
+        "options": {
+          "fileName": "invoice_analytics_output.csv"
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        272,
+        -736
+      ],
+      "id": "ae64a754-db76-4147-ace3-5467322c1101",
+      "name": "Convert to File"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Validate Invoice Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Extract from File1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Invoice Data": {
+      "main": [
+        [
+          {
+            "node": "Duplicate Invoice Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Duplicate Invoice Check": {
+      "main": [
+        [
+          {
+            "node": "Payment & Due Date Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Payment & Due Date Check": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File1": {
+      "main": [
+        [
+          {
+            "node": "Transaction Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Reconciliation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transaction Analysis": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Transaction Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Transaction Analysis": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Reconciliation": {
+      "main": [
+        [
+          {
+            "node": "Exception Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Exception Detection": {
+      "main": [
+        [
+          {
+            "node": "Financial Analytics",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Financial Analytics": {
+      "main": [
+        [
+          {
+            "node": "Final Reporting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Reporting": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "fc653961-0fbf-4ec0-8edf-a48cc94ee930",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "73b4116e322a1cf33dcdb9ed60cffa0467846f75fd927509cf0975cb8fffd282"
+  },
+  "nodeGroups": [],
+  "id": "iU6MOWBIWTQCQYXi",
+  "tags": []
+}
